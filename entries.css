@@ -1,0 +1,1 @@
+.entry-actions{text-align:right}.delete-entry{border:0;background:none;color:#ff6d6d;font-size:.72rem;padding:8px 0}.history-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}.history-row:last-child{border:0}.history-row h3{font-size:.85rem;margin:0 0 4px}.history-row p{color:var(--muted);font-size:.72rem;margin:0}

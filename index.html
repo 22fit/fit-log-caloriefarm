@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090a0b">
+  <title>FIT / LOG</title>
+  <meta name="description" content="飲食、訓練、步數與身體數據追蹤">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23090a0b'/%3E%3Cpath d='M18 40V24h6v16zm22 0V24h6v16zM12 36v-8h6v8zm34 0v-8h6v8zM24 34v-4h16v4z' fill='%23c8ff2e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="entries.css">
+</head>
+<body>
+<main class="app">
+  <header><div class="brand">FIT / LOG</div><button class="avatar" data-page="profile">FL</button></header>
+
+  <section class="page active" id="todayPage">
+    <p class="date" id="todayDate"></p><h1>今日</h1>
+    <article class="hero"><div class="hero-grid"><div><span class="label">ENERGY INTAKE</span><strong class="hero-number" id="todayCalories">0</strong><small><span id="calorieGoal">1,900</span> kcal · 尚餘 <span id="calorieLeft">1,900</span></small></div><div class="ring" id="calorieRing"><div><b id="caloriePercent">0%</b><small>今日</small></div></div></div><div class="macros"><div class="macro protein"><b><span id="proteinNow">0</span> / <span id="proteinGoal">140</span>g</b><small>PROTEIN</small></div><div class="macro carbs"><b><span id="carbsNow">0</span> / <span id="carbsGoal">210</span>g</b><small>CARBS</small></div><div class="macro fat"><b><span id="fatNow">0</span> / <span id="fatGoal">63</span>g</b><small>FAT</small></div></div></article>
+    <div class="section-head"><h2>活動概覽</h2></div><div class="two-col"><button class="stat" id="stepsCard"><span class="cyan">STEPS · 編輯</span><b id="todaySteps">0</b><small>目標 <span id="stepGoal">15,000</span></small></button><button class="stat" data-page="training"><span class="violet">TRAINING</span><b id="todaySets">0 Sets</b><small id="todayTrainingLabel">未有訓練</small></button></div>
+    <div class="section-head"><h2>今日飲食</h2><button data-page="food">新增</button></div><div class="panel" id="todayMeals"><div class="empty">尚未加入餐點</div></div>
+  </section>
+
+  <section class="page" id="foodPage">
+    <p class="date">飲食紀錄</p><h1>分析食物</h1>
+    <div class="capture"><div class="camera">＋</div><h2>拍攝或上載餐點</h2><p>辨認食物、煮法、份量及營養資料<br>原相只用於分析，不會保存</p><input id="foodFile" type="file" accept="image/*" capture="environment" hidden><button class="primary" id="chooseFood">選擇相片</button><button class="secondary" id="manualMeal">手動新增</button></div>
+    <div class="section-head"><h2>今日紀錄</h2></div><div class="panel" id="foodHistory"></div>
+  </section>
+
+  <section class="page" id="trainingPage">
+    <p class="date">訓練紀錄</p><h1>選擇肌群</h1><div class="chips" id="muscleGroups"></div>
+    <div class="section-head"><h2 id="workoutTitle">今日訓練</h2><button id="reuseWorkout">沿用上次</button></div><div id="workoutExercises"></div>
+    <button class="secondary" id="addExercise">＋ 新增動作</button><button class="primary" id="finishWorkout">完成訓練</button><div class="section-head"><h2>今日已完成</h2></div><div class="panel" id="workoutHistory"></div>
+  </section>
+
+  <section class="page" id="progressPage">
+    <p class="date">身體與活動趨勢</p><h1>進度</h1><div class="tabs" id="rangeTabs"><button class="on" data-days="7">7 日</button><button data-days="30">30 日</button><button data-days="90">3 個月</button></div>
+    <article class="panel trend"><span class="label">AVERAGE WEIGHT</span><div><strong id="averageWeight">—</strong><small> kg</small></div><p id="weightChange">未有足夠紀錄</p></article>
+    <article class="panel"><span class="label">DAILY STEPS</span><div class="bars" id="stepsChart"></div></article>
+    <div class="two-col"><div class="stat"><span class="blue">PROTEIN</span><b id="proteinDays">0 / 7</b><small>達標日數</small></div><div class="stat"><span class="violet">TRAINING</span><b id="trainingDays">0</b><small>訓練日數</small></div></div>
+  </section>
+
+  <section class="page" id="profilePage">
+    <p class="date">個人設定</p><h1>身體與目標</h1><div class="profile"><div class="avatar big">FL</div><div><h2 id="profileName">未設定</h2><p id="profileSummary">設定個人目標</p></div></div>
+    <div class="profile-grid"><button class="field" id="logBody"><small>目前體重 · 新增</small><b id="profileWeight">—</b></button><div class="field"><small>身高</small><b id="profileHeight">—</b></div><div class="field"><small>體脂率</small><b id="profileBodyFat">—</b></div><div class="field"><small>骨骼肌量</small><b id="profileMuscle">—</b></div><div class="field full"><small>體重目標</small><div class="split"><b id="profileTarget">—</b><span id="targetRemaining"></span></div></div><div class="field full"><small>每日目標</small><div class="split"><b id="profileCalories">—</b><span id="profileGoals"></span></div></div></div>
+    <div class="section-head"><h2>最近身體紀錄</h2></div><div class="panel" id="bodyHistory"></div><button class="secondary" id="editProfile">編輯個人資料</button><button class="secondary" id="restoreCloud">從 Google Sheets 還原</button><button class="danger-link" id="resetData">清除本機資料</button>
+  </section>
+</main>
+
+<nav><button class="active" data-page="today"><b>⌂</b>今日</button><button data-page="food"><b>◉</b>飲食</button><button data-page="training"><b>＋</b>訓練</button><button data-page="progress"><b>↗</b>進度</button><button data-page="profile"><b>●</b>個人</button></nav>
+
+<div class="overlay" id="sheetOverlay"><div class="sheet"><div class="grab"></div><div class="sheet-head"><h2 id="sheetTitle"></h2><button id="closeSheet">×</button></div><div id="sheetContent"></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="config.js"></script><script src="exercises.js"></script><script src="app.js"></script>
+</body>
+</html>
