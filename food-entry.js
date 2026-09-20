@@ -23,10 +23,10 @@ window.createFoodEntry=function(api){
  function defaults(category,name){return {category,name,cookingMethod:category==='水果'?'生食':category==='水'||category==='飲品'||category==='蛋白粉／補充品'?'即飲／沖調':'不確定',portion:category==='水果'?'1個':name==='雞蛋'?'1隻':category==='水'?'250 ml':category==='飲品'||category==='蛋白粉／補充品'?'1杯':'1份',oil:'不確定',notes:''}}
  function open(){job++;busy=false;draft=readDraft()||blank();if(!Array.isArray(draft.items))draft=blank();revision++;render();}
  function render(){
-  openSheet('新增飲食',`<p class="food-help">揀食物、煮法同實際食咗幾多，由 AI 估算營養。草稿自動保存在此裝置。</p>
+  openSheet('新增飲食',`<p class="food-help">水煮蛋、香蕉、白飯及水支援本機估算；其他交由 AI。草稿自動保存在此裝置。</p>
    <div class="form-grid"><div class="form-row"><label for="mealDate">日期</label><input class="control" id="mealDate" type="date" value="${esc(draft.date)}"></div><div class="form-row"><label for="mealType">餐別</label><select class="control" id="mealType">${choice(['早餐','午餐','晚餐','小食','運動後餐'],draft.mealType)}</select></div></div>
    <div class="chips" id="foodCategories">${Object.keys(GROUPS).map(c=>`<button class="chip" data-category="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-   <div id="quickFoods"></div><div id="foodItems"></div>
+   <div id="recentFoods"></div><div id="quickFoods"></div><div id="foodItems"></div>
    <div class="form-row"><label for="mealNotes">補充說明（選填）</label><textarea class="control" id="mealNotes" placeholder="例如：飯只食半碗，餸全食；或直接寫低一餐食咗乜">${esc(draft.notes)}</textarea></div>
    <button class="primary" id="estimateFood">分析營養</button><p id="foodStatus" class="food-help" role="status"></p><div id="foodResult" aria-live="polite"></div><button class="primary" id="confirmFood" hidden>確認並儲存</button><button class="danger-link" id="clearFoodDraft">清除草稿</button>`);
   $('#mealDate').onchange=e=>{draft.date=e.target.value;persist()};$('#mealType').onchange=e=>{draft.mealType=e.target.value;persist()};
@@ -34,8 +34,10 @@ window.createFoodEntry=function(api){
   $$('#foodCategories button').forEach(b=>b.onclick=()=>showCategory(b.dataset.category));
   $('#estimateFood').onclick=estimate;$('#confirmFood').onclick=save;
   $('#clearFoodDraft').onclick=()=>{if(!confirm('確定清除未儲存嘅食物草稿？'))return;job++;busy=false;draft=blank();revision++;persist();render()};
-  renderItems();renderResult();showCategory('水果');
+  renderItems();renderResult();showCategory('水果');renderRecents();
  }
+ function recentFoods(){try{return JSON.parse(localStorage.getItem('fitlog-food-recents')||'[]')}catch(e){return []}}
+ function renderRecents(){const recent=recentFoods();$('#recentFoods').innerHTML=recent.length?'<p class="food-help">最近用過（保留份量及標籤備註）</p><div class="food-quick">'+recent.map((i,n)=>`<button class="chip" data-recent="${n}">${esc(i.name)} · ${esc(i.portion)}</button>`).join('')+'</div>':'';$$('[data-recent]').forEach(b=>b.onclick=()=>{draft.items.push({...recent[+b.dataset.recent]});changed();renderItems()})}
  function showCategory(category){
   $$('#foodCategories button').forEach(b=>b.classList.toggle('on',b.dataset.category===category));
   $('#quickFoods').innerHTML=`<div class="food-quick">${GROUPS[category].map(name=>`<button class="chip" data-food="${esc(name)}">＋ ${esc(name)}</button>`).join('')}<button class="chip" id="otherFood">＋ 自訂${esc(category==='其他'?'食物':category)}</button></div>`;
@@ -64,21 +66,22 @@ window.createFoodEntry=function(api){
  async function estimate(){
   if(busy)return;if(!draft.items.length&&!draft.notes.trim())return toast('請先選擇食物或填寫說明');
   if(draft.items.some(i=>!i.name.trim()||!i.portion.trim()))return toast('請填食物名稱及份量');
-  busy=true;const requestId=++job,start=revision,epoch=getEpoch();$('#estimateFood').disabled=true;$('#foodStatus').textContent='正在估算營養…可繼續修改，改動後需重新分析。';
+  busy=true;const requestId=++job,start=revision,epoch=getEpoch();$('#estimateFood').disabled=true;$('#foodStatus').textContent='正在分析；AI 如繁忙會自動重試及檢查後備模型，請稍候。';
   try{
-   const result=await sync('analyzeFood',{foodText:JSON.stringify({items:draft.items,notes:draft.notes,mealType:draft.mealType})});
+   const result=window.fitlogLocalNutrition(draft)||await sync('analyzeFood',{foodText:JSON.stringify({items:draft.items,notes:draft.notes,mealType:draft.mealType})});
    if(requestId!==job)return;
    if(start!==revision){if(getEpoch()===epoch)$('#foodStatus').textContent='輸入已更改，請再按分析營養。';return}
    if(!validResult(result))throw new Error('invalid result');draft.result=result;persist();if(getEpoch()===epoch){renderResult();$('#foodStatus').textContent='分析完成，確認份量後即可儲存。'}
-  }catch(e){if(requestId===job&&getEpoch()===epoch)$('#foodStatus').textContent='分析未成功，草稿已保留。請確認網絡及新版 Apps Script 已部署，再重試。'}
+  }catch(e){if(requestId===job&&getEpoch()===epoch)$('#foodStatus').textContent=window.fitlogAnalysisError(e)}
   finally{if(requestId===job){busy=false;if(getEpoch()===epoch)$('#estimateFood').disabled=false}}
  }
  function save(){if(!validResult(draft.result))return toast('請先分析營養');if(!draft.date)return toast('請選擇日期');
   const items=draft.result.items,totals=items.reduce((a,i)=>{NUTRIENTS.forEach(k=>a[k]+=i[k]);return a},{calories:0,protein:0,carbs:0,fat:0});
   commit({date:draft.date,type:draft.mealType,items,...totals,foodInput:draft.items,notes:draft.notes});
+  try{const recent=[...draft.items,...recentFoods()],seen=new Set();localStorage.setItem('fitlog-food-recents',JSON.stringify(recent.filter(i=>{const key=JSON.stringify(i);if(seen.has(key))return false;seen.add(key);return true}).slice(0,12)))}catch(e){}
   localStorage.removeItem(KEY);draft=null;job++;busy=false;closeSheet();toast('飲食已儲存');
  }
  $('#manualMeal').onclick=open;
  $('#chooseFood').onclick=()=>{if(readDraft()&&!confirm('已有食物草稿。確定用新相片取代？取消後可按「揀食物／文字新增」繼續草稿。'))return;$('#foodFile').click()};
- $('#foodFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;const requestId=++job;openSheet('分析食物','<p class="food-help">分析相片中…</p>');const epoch=getEpoch();try{const imageBase64=await resizeImage(file);const r=await sync('analyzeFood',{imageBase64,mimeType:'image/jpeg'});if(requestId!==job)return;if(!validResult(r))throw new Error('invalid result');draft={...blank(),mealType:r.mealType||'午餐',items:r.items.map(i=>({...defaults(categoryFor(i.name),i.name),portion:i.portion,cookingMethod:i.cookingMethod,oil:i.oil})),result:r};persist();if(getEpoch()===epoch)render();else toast('相片分析已存草稿，稍後可繼續')}catch(e){if(requestId===job&&getEpoch()===epoch){closeSheet();toast('分析失敗，原有草稿仍然保留')}}finally{$('#foodFile').value=''}};
+ $('#foodFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;const requestId=++job;openSheet('分析食物','<p class="food-help">分析相片中；AI 如繁忙會自動重試及檢查後備模型…</p>');const epoch=getEpoch();try{const imageBase64=await resizeImage(file);const r=await sync('analyzeFood',{imageBase64,mimeType:'image/jpeg'});if(requestId!==job)return;if(!validResult(r))throw new Error('invalid result');draft={...blank(),mealType:r.mealType||'午餐',items:r.items.map(i=>({...defaults(categoryFor(i.name),i.name),portion:i.portion,cookingMethod:i.cookingMethod,oil:i.oil})),result:r};persist();if(getEpoch()===epoch)render();else toast('相片分析已存草稿，稍後可繼續')}catch(e){if(requestId===job&&getEpoch()===epoch){openSheet('分析暫未成功',`<p class="food-help">${esc(window.fitlogAnalysisError(e))}</p><p class="food-help">相片不會儲存；重試相片分析需重新選相。原有文字草稿仍保留。</p><button class="secondary" id="returnFoodDraft">返回文字新增</button>`);$('#returnFoodDraft').onclick=open}}finally{$('#foodFile').value=''}};
 };
