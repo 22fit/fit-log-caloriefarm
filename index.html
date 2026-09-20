@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#090a0b">
   <title>FIT / LOG</title>
   <meta name="description" content="飲食、訓練、步數與身體數據追蹤">
+  <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="FIT LOG">
+  <link rel="apple-touch-icon" href="app-icon.png"><link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23090a0b'/%3E%3Cpath d='M18 40V24h6v16zm22 0V24h6v16zM12 36v-8h6v8zm34 0v-8h6v8zM24 34v-4h16v4z' fill='%23c8ff2e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="entries.css">
 </head>
@@ -42,7 +44,7 @@
   <section class="page" id="profilePage">
     <p class="date">個人設定</p><h1>身體與目標</h1><div class="profile"><div class="avatar big">FL</div><div><h2 id="profileName">未設定</h2><p id="profileSummary">設定個人目標</p></div></div>
     <div class="profile-grid"><button class="field" id="logBody"><small>目前體重 · 新增</small><b id="profileWeight">—</b></button><div class="field"><small>身高</small><b id="profileHeight">—</b></div><div class="field"><small>體脂率</small><b id="profileBodyFat">—</b></div><div class="field"><small>骨骼肌量</small><b id="profileMuscle">—</b></div><div class="field full"><small>體重目標</small><div class="split"><b id="profileTarget">—</b><span id="targetRemaining"></span></div></div><div class="field full"><small>每日目標</small><div class="split"><b id="profileCalories">—</b><span id="profileGoals"></span></div></div></div>
-    <div class="section-head"><h2>最近身體紀錄</h2></div><div class="panel" id="bodyHistory"></div><button class="secondary" id="editProfile">編輯個人資料</button><button class="secondary" id="restoreCloud">從 Google Sheets 還原</button><button class="danger-link" id="resetData">清除本機資料</button>
+    <div class="section-head"><h2>最近身體紀錄</h2></div><div class="panel" id="bodyHistory"></div><button class="secondary" id="editProfile">編輯個人資料</button><button class="secondary" id="restoreCloud">立即同步所有裝置</button><button class="danger-link" id="resetData">清除本機資料</button>
   </section>
 </main>
 
