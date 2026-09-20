@@ -1,6 +1,6 @@
 window.createFoodEntry=function(api){
  const {$,$$,esc,openSheet,closeSheet,toast,sync,day,resizeImage,commit,getEpoch}=api;
- const KEY='fitlog-food-draft-v2',NUTRIENTS=['calories','protein','carbs','fat'];
+ const KEY='fitlog-food-draft-v2',BATCH_KEY='fitlog-food-day-draft-v1',NUTRIENTS=['calories','protein','carbs','fat'],MEAL_TYPES=['早餐','午餐','晚餐','小食','運動後餐'];
  const GROUPS={
   '水果':['香蕉','蘋果','橙','奇異果','藍莓','士多啤梨','提子','西瓜'],
   '原型食物':['雞蛋','雞胸肉','雞髀','魚柳','三文魚','牛肉','豆腐','番薯','粟米'],
@@ -13,7 +13,7 @@ window.createFoodEntry=function(api){
   '零食':['乳酪','希臘乳酪','果仁','餅乾','朱古力','薯片'],
   '其他':[]
  };
- let draft=null,revision=0,busy=false,job=0;
+ let draft=null,revision=0,busy=false,job=0,batchDraft=null,batchBusy=false,batchImages={};
  const blank=()=>({date:day(),mealType:'午餐',items:[],notes:'',result:null});
  function readDraft(){try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){return null}}
  function persist(){try{localStorage.setItem(KEY,JSON.stringify(draft))}catch(e){toast('未能保存草稿，請勿關閉頁面')}}
@@ -81,7 +81,64 @@ window.createFoodEntry=function(api){
   try{const recent=[...draft.items,...recentFoods()],seen=new Set();localStorage.setItem('fitlog-food-recents',JSON.stringify(recent.filter(i=>{const key=JSON.stringify(i);if(seen.has(key))return false;seen.add(key);return true}).slice(0,12)))}catch(e){}
   localStorage.removeItem(KEY);draft=null;job++;busy=false;closeSheet();toast('飲食已儲存');
  }
- $('#manualMeal').onclick=open;
+ function blankBatch(){return {date:day(),meals:MEAL_TYPES.map(mealType=>({mealType,text:'',correction:'',result:null}))}}
+ function readBatch(){try{const v=JSON.parse(localStorage.getItem(BATCH_KEY)||'null');if(!v||!Array.isArray(v.meals))return null;const byType=Object.fromEntries(v.meals.map(m=>[m.mealType,m]));return {date:v.date||day(),meals:MEAL_TYPES.map(mealType=>({...{mealType,text:'',correction:'',result:null},...(byType[mealType]||{})}))}}catch(e){return null}}
+ function persistBatch(){try{localStorage.setItem(BATCH_KEY,JSON.stringify(batchDraft))}catch(e){toast('未能保存全日草稿，請勿關閉頁面')}}
+ function mealTotals(result){return (result?.items||[]).reduce((a,i)=>{NUTRIENTS.forEach(k=>a[k]+=+i[k]||0);return a},{calories:0,protein:0,carbs:0,fat:0})}
+ function validDayResult(result){return result&&Array.isArray(result.meals)&&result.meals.length&&result.meals.every(m=>MEAL_TYPES.includes(m.mealType)&&validResult(m))}
+ function batchActiveMeals(){return batchDraft.meals.filter(m=>m.text.trim()||batchImages[m.mealType])}
+ function openBatch(){job++;batchBusy=false;batchDraft=readBatch()||blankBatch();renderBatch()}
+ function renderBatch(){
+  const active=batchActiveMeals();
+  const validCount=active.filter(m=>validResult(m.result)).length;
+  const total=active.reduce((a,m)=>{const t=mealTotals(m.result);NUTRIENTS.forEach(k=>a[k]+=t[k]);return a},{calories:0,protein:0,carbs:0,fat:0});
+  openSheet('補錄全日',`<p class="food-help batch-notice">早餐、午餐、晚餐、小食可以一次過填。最後只會送出一次 AI 分析；相片只留在目前頁面記憶，不會保存到裝置或 Google Sheet。</p>
+   <div class="batch-day-head"><div class="form-row"><label for="batchDate">日期</label><input class="control" id="batchDate" type="date" value="${esc(batchDraft.date)}"></div><span class="food-help">${active.length?`${validCount}/${active.length} 餐已分析`:'未有輸入'}</span></div>
+   <div id="batchMeals">${batchDraft.meals.map(batchMealHtml).join('')}</div>
+   ${validCount?`<div class="summary batch-total"><span>已分析合計</span><strong>${Math.round(total.calories)} kcal</strong><small>P ${Math.round(total.protein)}g · C ${Math.round(total.carbs)}g · F ${Math.round(total.fat)}g</small></div>`:''}
+   <button class="primary" id="analyzeBatch" ${active.length?'':'disabled'}>✨ 一次分析全部${active.length?` ${active.length} 餐`:''}</button><p id="batchStatus" class="food-help" role="status"></p>
+   <button class="primary" id="saveBatch" ${active.length&&validCount===active.length?'':'hidden'}>確認並儲存全部</button><button class="danger-link" id="clearBatch">清除全日草稿</button>`);
+  $('#batchDate').onchange=e=>{batchDraft.date=e.target.value;persistBatch()};
+  $$('[data-batch-text]').forEach(el=>el.oninput=()=>{const m=batchDraft.meals.find(x=>x.mealType===el.dataset.batchText);m.text=el.value;m.result=null;m.correction='';persistBatch();const resultBox=el.closest('.batch-meal')?.querySelector('.batch-result');if(resultBox)resultBox.innerHTML='<p class="food-help">內容已更改，請重新分析呢餐或再一次分析全部。</p>';const totalBox=document.querySelector('.batch-total');if(totalBox)totalBox.remove();updateBatchAnalyzeLabel()});
+  $$('[data-batch-photo-button]').forEach(b=>b.onclick=()=>{const input=$$('[data-batch-photo]').find(x=>x.dataset.batchPhoto===b.dataset.batchPhotoButton);if(input)input.click()});
+  $$('[data-batch-photo]').forEach(inp=>inp.onchange=async e=>{const type=inp.dataset.batchPhoto,file=e.target.files[0];if(!file)return;const state=$$('[data-batch-photo-state]').find(x=>x.dataset.batchPhotoState===type);try{state.textContent='正在處理相片…';const imageBase64=await resizeImage(file);batchImages[type]={imageBase64,mimeType:'image/jpeg',name:file.name};const m=batchDraft.meals.find(x=>x.mealType===type);m.result=null;persistBatch();renderBatch()}catch(err){toast('相片讀取失敗，請重新選擇')}});
+  $$('[data-remove-batch-photo]').forEach(b=>b.onclick=()=>{delete batchImages[b.dataset.removeBatchPhoto];const m=batchDraft.meals.find(x=>x.mealType===b.dataset.removeBatchPhoto);m.result=null;persistBatch();renderBatch()});
+  $$('[data-batch-correction]').forEach(el=>el.oninput=()=>{const m=batchDraft.meals.find(x=>x.mealType===el.dataset.batchCorrection);m.correction=el.value;persistBatch();if($('#saveBatch'))$('#saveBatch').hidden=true});
+  $$('[data-reanalyze-meal]').forEach(b=>b.onclick=()=>reanalyzeBatchMeal(b.dataset.reanalyzeMeal));
+  $('#analyzeBatch').onclick=analyzeBatch;
+  if($('#saveBatch'))$('#saveBatch').onclick=saveBatch;
+  $('#clearBatch').onclick=()=>{if(!confirm('確定清除全日補錄草稿？'))return;batchDraft=blankBatch();batchImages={};localStorage.removeItem(BATCH_KEY);renderBatch()};
+ }
+ function batchMealHtml(m){
+  const hasPhoto=!!batchImages[m.mealType],r=m.result,t=mealTotals(r);
+  return `<article class="batch-meal" data-batch-meal="${esc(m.mealType)}"><div class="batch-meal-head"><h3>${esc(m.mealType)}</h3><span class="batch-photo-state ${hasPhoto?'on':''}" data-batch-photo-state="${esc(m.mealType)}">${hasPhoto?'✓ 已加相片':'文字或相片均可'}</span></div>
+   <textarea class="control" data-batch-text="${esc(m.mealType)}" placeholder="例如：叉燒飯，飯食半碗；凍奶茶走甜">${esc(m.text)}</textarea>
+   <input type="file" accept="image/*" capture="environment" hidden data-batch-photo="${esc(m.mealType)}"><div class="batch-actions"><button class="secondary" data-batch-photo-button="${esc(m.mealType)}">${hasPhoto?'更換相片':'＋ 加相片'}</button>${hasPhoto?`<button class="secondary" data-remove-batch-photo="${esc(m.mealType)}">移除相片</button>`:'<span></span>'}</div>
+   ${validResult(r)?`<div class="batch-result">${r.items.map(i=>`<div class="meal"><div><h3>${esc(i.name)}</h3><p>${esc(i.portion)} · ${esc(i.cookingMethod)}</p><div class="tags"><span class="tag blue">P ${Math.round(i.protein)}g</span><span class="tag" style="color:var(--orange)">C ${Math.round(i.carbs)}g</span><span class="tag" style="color:var(--pink)">F ${Math.round(i.fat)}g</span></div></div><strong>${Math.round(i.calories)} kcal</strong></div>`).join('')}<div class="summary"><span>${esc(m.mealType)}估算</span><strong>${Math.round(t.calories)} kcal</strong></div><p class="food-help">${esc(r.notes||'營養為估算值。')}</p><div class="batch-correction"><textarea class="control" data-batch-correction="${esc(m.mealType)}" placeholder="如有需要：例如其實雞皮冇食、飯只食 1/3 碗">${esc(m.correction||'')}</textarea><button class="secondary" data-reanalyze-meal="${esc(m.mealType)}">只重分析呢餐</button></div></div>`:''}</article>`
+ }
+ function updateBatchAnalyzeLabel(){const active=batchActiveMeals(),b=$('#analyzeBatch');if(!b)return;b.disabled=!active.length;b.textContent=`✨ 一次分析全部${active.length?` ${active.length} 餐`:''}`;if($('#saveBatch'))$('#saveBatch').hidden=true}
+ async function analyzeBatch(){
+  if(batchBusy)return;const active=batchActiveMeals();if(!active.length)return toast('請至少填一餐或加入相片');if(!batchDraft.date)return toast('請選擇日期');
+  batchBusy=true;const requestId=++job,epoch=getEpoch();$('#analyzeBatch').disabled=true;$('#batchStatus').textContent=`正在一次分析 ${active.length} 餐；AI 如繁忙會自動重試及切換後備模型。`;
+  try{
+   const payload={meals:active.map(m=>({mealType:m.mealType,text:m.text,...(batchImages[m.mealType]||{})}))};
+   const result=await sync('analyzeFoodDay',payload);if(requestId!==job)return;if(!validDayResult(result))throw new Error('invalid day nutrition result');
+   result.meals.forEach(r=>{const m=batchDraft.meals.find(x=>x.mealType===r.mealType);if(m){m.result=r;m.correction=''}});persistBatch();if(getEpoch()===epoch){renderBatch();const s=$('#batchStatus');if(s)s.textContent=`分析完成，共 ${result.meals.length} 餐。確認後可一次儲存。`}
+  }catch(e){if(requestId===job&&getEpoch()===epoch){const s=$('#batchStatus');if(s)s.textContent=window.fitlogAnalysisError(e)}}
+  finally{if(requestId===job){batchBusy=false;if(getEpoch()===epoch&&$('#analyzeBatch'))$('#analyzeBatch').disabled=false}}
+ }
+ async function reanalyzeBatchMeal(type){
+  if(batchBusy)return;const m=batchDraft.meals.find(x=>x.mealType===type);if(!m)return;batchBusy=true;const requestId=++job,epoch=getEpoch();const b=$$('[data-reanalyze-meal]').find(x=>x.dataset.reanalyzeMeal===type);if(b)b.disabled=true;const s=$('#batchStatus');if(s)s.textContent=`正在只重分析${type}…`;
+  try{
+   const img=batchImages[type]||{};const foodText=JSON.stringify({mealType:type,description:m.text,correction:m.correction||'',instruction:'請按 correction 修正原本描述；只分析這一餐。'});const r=await sync('analyzeFood',{foodText,...img});if(requestId!==job)return;if(!validResult(r))throw new Error('invalid result');r.mealType=type;m.result=r;m.correction='';persistBatch();if(getEpoch()===epoch)renderBatch()
+  }catch(e){if(requestId===job&&getEpoch()===epoch){const st=$('#batchStatus');if(st)st.textContent=window.fitlogAnalysisError(e)}}finally{if(requestId===job)batchBusy=false}
+ }
+ function saveBatch(){
+  const active=batchActiveMeals();if(!active.length)return toast('未有可儲存餐點');const missing=active.filter(m=>!validResult(m.result));if(missing.length)return toast(`仲有 ${missing.length} 餐未完成分析`);if(!batchDraft.date)return toast('請選擇日期');
+  active.forEach(m=>{const totals=mealTotals(m.result);commit({date:batchDraft.date,type:m.mealType,items:m.result.items,...totals,batchInput:m.text,notes:[m.text,m.result.notes].filter(Boolean).join(' · ')})});
+  const count=active.length;localStorage.removeItem(BATCH_KEY);batchDraft=null;batchImages={};job++;batchBusy=false;closeSheet();toast(`已儲存 ${count} 餐`)
+ }
+ $('#manualMeal').onclick=open;$('#batchMeal').onclick=openBatch;
  $('#chooseFood').onclick=()=>{if(readDraft()&&!confirm('已有食物草稿。確定用新相片取代？取消後可按「揀食物／文字新增」繼續草稿。'))return;$('#foodFile').click()};
  $('#foodFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;const requestId=++job;openSheet('分析食物','<p class="food-help">分析相片中；AI 如繁忙會自動重試及檢查後備模型…</p>');const epoch=getEpoch();try{const imageBase64=await resizeImage(file);const r=await sync('analyzeFood',{imageBase64,mimeType:'image/jpeg'});if(requestId!==job)return;if(!validResult(r))throw new Error('invalid result');draft={...blank(),mealType:r.mealType||'午餐',items:r.items.map(i=>({...defaults(categoryFor(i.name),i.name),portion:i.portion,cookingMethod:i.cookingMethod,oil:i.oil})),result:r};persist();if(getEpoch()===epoch)render();else toast('相片分析已存草稿，稍後可繼續')}catch(e){if(requestId===job&&getEpoch()===epoch){openSheet('分析暫未成功',`<p class="food-help">${esc(window.fitlogAnalysisError(e))}</p><p class="food-help">相片不會儲存；重試相片分析需重新選相。原有文字草稿仍保留。</p><button class="secondary" id="returnFoodDraft">返回文字新增</button>`);$('#returnFoodDraft').onclick=open}}finally{$('#foodFile').value=''}};
 };

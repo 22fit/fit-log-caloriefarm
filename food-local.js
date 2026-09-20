@@ -29,10 +29,11 @@ window.fitlogLocalNutrition=function(draft){
 window.fitlogAnalysisError=function(error){
  const message=String(error?.message||error||'');
  if(/AI_BUSY|503|UNAVAILABLE|high demand/i.test(message))return 'AI 暫時繁忙，重試仍未成功。草稿已保留，請稍後再試。';
- if(/AI_QUOTA|429|Daily analyzeFood limit/i.test(message))return '分析請求過密或配額已用完，草稿已保留。請稍後再試，或使用支援本機估算的食物。';
+ if(/AI_QUOTA|429|Daily analyzeFood(?:Day)? limit/i.test(message))return '分析請求過密或配額已用完，草稿已保留。請稍後再試，或使用支援本機估算的食物。';
  if(/AI_AUTH|GEMINI_API_KEY|Unauthorized/i.test(message))return '分析連線設定或存取權有問題，請管理者檢查 API Key／App Token。草稿已保留。';
  if(/AI_MODEL|404/i.test(message))return '目前 AI 模型不可用，亦未能找到可用後備模型。草稿已保留。';
  if(/AI_REQUEST|400/i.test(message))return 'AI 不接受目前請求，請管理者檢查 Key、模型與請求格式。草稿已保留。';
  if(/invalid result|AI_FORMAT|nutrition result|no result|JSON/i.test(message))return 'AI 未回傳完整營養結果，草稿已保留，請重試。';
+ if(/too many|too-large|description too long|missing day food/i.test(message))return '今次輸入太多或格式有問題，請減少相片／文字後再試。草稿已保留。';
  return '分析連線未成功，請檢查網絡後重試。草稿已保留。';
 };
