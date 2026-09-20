@@ -10,3 +10,6 @@
 
 /* v1.9 — explicit Other food option */
 .custom-food-trigger{border-style:dashed}.custom-food-box{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin:-5px 0 15px}.custom-food-box .secondary{margin:0;white-space:nowrap}.batch-custom-food-box{margin-top:-5px}@media(max-width:520px){.custom-food-box{grid-template-columns:1fr}.custom-food-box .secondary{width:100%}}
+
+/* v2.0 — multi-item meals + stable picker + custom portions */
+.add-more-food{width:100%;margin:10px 0 4px;border-style:dashed}.add-more-hint{margin:0 0 14px;text-align:center}.custom-portion-inline{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;margin:7px 0 3px;padding:9px 10px;border:1px dashed var(--line);border-radius:12px}.custom-portion-inline>span{font-size:.76rem;color:var(--muted);white-space:nowrap}.custom-portion-inline .control{min-width:0;margin:0}.custom-portion-inline.on{border-color:var(--lime);background:rgba(200,255,46,.05)}.batch-items .food-item+.food-item,#foodItems .food-item+.food-item{margin-top:12px}.batch-meal-body{scroll-margin-top:16px}.batch-categories,#foodCategories{scroll-margin-top:24px}

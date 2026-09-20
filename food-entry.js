@@ -43,42 +43,50 @@ window.createFoodEntry=function(api){
   const idxAttr=prefix?`data-batch-item="${n}"`:`data-index="${n}"`;
   const fieldPrefix=prefix?'data-batch-field':'data-field';
   const portionAttr=prefix?'data-batch-portion':'data-portion';
+  const customPortionAttr=prefix?'data-batch-custom-portion':'data-custom-portion';
   const removeAttr=prefix?'data-batch-remove':'data-remove';
+  const presetPortions=portions(i),customPortion=!presetPortions.includes(i.portion);
   return `<article class="food-item" ${idxAttr}><div class="food-item-head"><div><b>${esc(i.name)}</b><small>${esc(i.category)}</small></div><button class="delete-entry" ${removeAttr}="${n}">刪除</button></div>
    <div class="form-grid"><div class="form-row"><label>煮法</label><select class="control" ${fieldPrefix}="cookingMethod">${choice([...new Set([i.cookingMethod,...COOKING])],i.cookingMethod)}</select></div><div class="form-row"><label>用油</label><select class="control" ${fieldPrefix}="oil">${choice(OILS,i.oil)}</select></div></div>
-   <div class="form-row"><label>實際食用份量</label><div class="food-quick portion-picker">${portions(i).map(p=>`<button class="chip ${p===i.portion?'on':''}" ${portionAttr}="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
+   <div class="form-row"><label>實際食用份量</label><div class="food-quick portion-picker">${presetPortions.map(p=>`<button class="chip ${p===i.portion?'on':''}" ${portionAttr}="${esc(p)}">${esc(p)}</button>`).join('')}</div><label class="custom-portion-inline ${customPortion?'on':''}"><span>其他：</span><input class="control" ${customPortionAttr} value="${customPortion?esc(i.portion):''}" autocomplete="off" placeholder="例如：4條、¾碗、350 ml"></label></div>
    <details ${i.notes?'open':''}><summary>補充／包裝標籤（選填）</summary><input class="control" ${fieldPrefix}="notes" value="${esc(i.notes)}" placeholder="例如：每杯 27g protein；飯半碗、餸全食"></details></article>`;
  }
  function categoriesHtml(selected,attr){return Object.keys(GROUPS).map(c=>`<button class="chip ${c===selected?'on':''}" ${attr}="${esc(c)}">${esc(c)}</button>`).join('')}
  function quickHtml(category,attr,customAttr){return GROUPS[category].map(name=>`<button class="chip" ${attr}="${esc(name)}">＋ ${esc(name)}</button>`).join('')+`<button class="chip custom-food-trigger" ${customAttr}>＋ 其他</button>`}
+ function sheetScroller(){return document.querySelector('#sheetOverlay .sheet')}
+ function captureSingleView(){const el=sheetScroller();return {scrollTop:el?el.scrollTop:0}}
+ function captureBatchView(){const el=sheetScroller();return {scrollTop:el?el.scrollTop:0,openMeals:$$('.batch-meal[open]').map(x=>+x.dataset.mealIndex)}}
+ function restoreView(view){if(!view)return;requestAnimationFrame(()=>{const el=sheetScroller();if(el)el.scrollTop=view.scrollTop||0})}
 
  // ----- Single meal picker -----
  function changed(){revision++;draft.result=null;persist();renderResult()}
  function open(){job++;busy=false;draft=readJSON(KEY)||blank();if(!Array.isArray(draft.items))draft=blank();draft.category=GROUPS[draft.category]?draft.category:'水果';revision++;render()}
- function render(){
+ function render(view=null){
   openSheet('新增飲食',`<p class="food-help batch-notice">揀分類 → 撳食物 → 揀份量／煮法 → 分析營養 → 確認儲存。只有「補充／標籤」需要時先打字。</p>
    <div class="form-grid"><div class="form-row"><label for="mealDate">日期</label><input class="control" id="mealDate" type="date" value="${esc(draft.date)}"></div><div class="form-row"><label for="mealType">餐別</label><select class="control" id="mealType">${choice(MEAL_TYPES,draft.mealType)}</select></div></div>
    <p class="picker-step">1 · 揀分類</p><div class="chips" id="foodCategories">${categoriesHtml(draft.category,'data-category')}</div>
    <p class="picker-step">2 · 撳食物</p><div id="quickFoods"><div class="food-quick">${quickHtml(draft.category,'data-food','data-custom-food')}</div><div class="custom-food-box" id="customFoodBox" hidden><input class="control" id="customFoodName" autocomplete="off" placeholder="其他食物名稱，例如：魚香茄子飯"><button class="secondary" id="addCustomFood" type="button">加入</button></div></div>
-   <p class="picker-step">3 · 揀份量／煮法</p><div id="foodItems"></div>
+   <p class="picker-step">3 · 已加入食物／揀份量及煮法</p><div id="foodItems"></div><button class="secondary add-more-food" id="addAnotherFood" type="button">＋ 添加另一樣食物</button><p class="food-help add-more-hint">一餐可以有多樣食物；上一項唔會被取代。</p>
    <div class="form-row"><label for="mealNotes">整餐補充（選填）</label><textarea class="control" id="mealNotes" placeholder="例如：飯半碗，餸全食">${esc(draft.notes||'')}</textarea></div>
    <button class="primary" id="estimateFood">分析營養</button><p id="foodStatus" class="food-help" role="status"></p><div id="foodResult" aria-live="polite"></div><button class="primary" id="confirmFood" hidden>確認並儲存</button><button class="danger-link" id="clearFoodDraft">清除草稿</button>`);
   $('#mealDate').onchange=e=>{draft.date=e.target.value;persist()};$('#mealType').onchange=e=>{draft.mealType=e.target.value;persist()};
   $('#mealNotes').oninput=e=>{draft.notes=e.target.value;changed()};
-  $$('#foodCategories [data-category]').forEach(b=>b.onclick=()=>{draft.category=b.dataset.category;persist();render()});
-  $$('#quickFoods [data-food]').forEach(b=>b.onclick=()=>{draft.items.push(defaults(draft.category,b.dataset.food));changed();render()});
+  $$('#foodCategories [data-category]').forEach(b=>b.onclick=()=>{const view=captureSingleView();draft.category=b.dataset.category;persist();render(view)});
+  $$('#quickFoods [data-food]').forEach(b=>b.onclick=()=>{const view=captureSingleView();draft.items.push(defaults(draft.category,b.dataset.food));changed();render(view)});
   const customFoodTrigger=$('#quickFoods [data-custom-food]');if(customFoodTrigger)customFoodTrigger.onclick=()=>{const box=$('#customFoodBox');box.hidden=!box.hidden;if(!box.hidden)setTimeout(()=>$('#customFoodName')?.focus(),0)};
-  const addCustomFood=()=>{const input=$('#customFoodName'),name=(input?.value||'').trim();if(!name)return toast('請輸入其他食物名稱');draft.items.push(defaults(draft.category,name));changed();render()};
+  const addCustomFood=()=>{const input=$('#customFoodName'),name=(input?.value||'').trim();if(!name)return toast('請輸入其他食物名稱');const view=captureSingleView();draft.items.push(defaults(draft.category,name));changed();render(view)};
   if($('#addCustomFood'))$('#addCustomFood').onclick=addCustomFood;if($('#customFoodName'))$('#customFoodName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addCustomFood()}};
   $('#estimateFood').onclick=estimate;$('#confirmFood').onclick=save;
+  $('#addAnotherFood').onclick=()=>{const target=$('#foodCategories');if(target)target.scrollIntoView({behavior:'smooth',block:'center'});toast('揀分類再加下一樣食物')};
   $('#clearFoodDraft').onclick=()=>{if(!confirm('確定清除未儲存嘅食物草稿？'))return;job++;busy=false;draft=blank();revision++;persist();render()};
-  renderItems();renderResult();
+  renderItems();renderResult();restoreView(view);
  }
  function renderItems(){
   $('#foodItems').innerHTML=draft.items.length?draft.items.map((i,n)=>itemHtml(i,n)).join(''):'<p class="food-help empty-picker">未揀食物。</p>';
   $$('#foodItems [data-field]').forEach(el=>{el.oninput=()=>{const n=+el.closest('[data-index]').dataset.index;draft.items[n][el.dataset.field]=el.value;changed()}});
-  $$('#foodItems [data-portion]').forEach(b=>b.onclick=()=>{const article=b.closest('[data-index]'),i=draft.items[+article.dataset.index];i.portion=b.dataset.portion;changed();render()});
-  $$('#foodItems [data-remove]').forEach(b=>b.onclick=()=>{draft.items.splice(+b.dataset.remove,1);changed();render()});
+  $$('#foodItems [data-portion]').forEach(b=>b.onclick=()=>{const view=captureSingleView(),article=b.closest('[data-index]'),i=draft.items[+article.dataset.index];i.portion=b.dataset.portion;changed();render(view)});
+  $$('#foodItems [data-custom-portion]').forEach(inp=>inp.oninput=()=>{const article=inp.closest('[data-index]'),i=draft.items[+article.dataset.index],v=inp.value.trim();if(!v)return;i.portion=v;article.querySelectorAll('[data-portion]').forEach(x=>x.classList.remove('on'));inp.closest('.custom-portion-inline')?.classList.add('on');changed()});
+  $$('#foodItems [data-remove]').forEach(b=>b.onclick=()=>{const view=captureSingleView();draft.items.splice(+b.dataset.remove,1);changed();render(view)});
  }
  function renderResult(){if(!$('#foodResult'))return;const r=draft.result;$('#confirmFood').hidden=!validResult(r);$('#foodResult').innerHTML=validResult(r)?resultHtml(r):'<p class="food-help">未分析／資料已更改，請按「分析營養」。</p>'}
  async function estimate(){
@@ -100,39 +108,44 @@ window.createFoodEntry=function(api){
  function activeMeals(){return batchDraft.meals.filter(m=>m.items.length)}
  function invalidateMeal(m){m.result=null;persistBatch()}
  function openBatch(){job++;batchBusy=false;batchDraft=readBatch()||blankBatch();renderBatch()}
- function batchMealHtml(m,mi){
+ function batchMealHtml(m,mi,openMeals){
   const r=m.result,t=totalsFor(r),count=m.items.length;
-  return `<details class="batch-meal" data-meal-index="${mi}" ${count?'open':''}><summary class="batch-meal-head"><div><h3>${esc(m.mealType)}</h3><small>${count?`${count} 項食物`:'未揀食物'}</small></div><span>${validResult(r)?`✓ ${Math.round(t.calories)} kcal`:'›'}</span></summary><div class="batch-meal-body">
+  const shouldOpen=count||openMeals?.has(mi);
+  return `<details class="batch-meal" data-meal-index="${mi}" ${shouldOpen?'open':''}><summary class="batch-meal-head"><div><h3>${esc(m.mealType)}</h3><small>${count?`${count} 項食物`:'未揀食物'}</small></div><span>${validResult(r)?`✓ ${Math.round(t.calories)} kcal`:'›'}</span></summary><div class="batch-meal-body">
    <p class="picker-step">1 · 揀分類</p><div class="chips batch-categories">${categoriesHtml(m.category,'data-batch-category')}</div>
    <p class="picker-step">2 · 撳食物</p><div class="food-quick batch-quick">${quickHtml(m.category,'data-batch-food','data-batch-custom-food')}</div><div class="custom-food-box batch-custom-food-box" hidden><input class="control" data-batch-custom-name autocomplete="off" placeholder="其他食物名稱，例如：魚香茄子飯"><button class="secondary" data-batch-add-custom type="button">加入</button></div>
-   <p class="picker-step">3 · 揀份量／煮法</p><div class="batch-items">${count?m.items.map((i,n)=>itemHtml(i,n,'batch')).join(''):'<p class="food-help empty-picker">未揀食物。</p>'}</div>
+   <p class="picker-step">3 · 已加入食物／揀份量及煮法</p><div class="batch-items">${count?m.items.map((i,n)=>itemHtml(i,n,'batch')).join(''):'<p class="food-help empty-picker">未揀食物。</p>'}</div><button class="secondary add-more-food" data-batch-add-more="${mi}" type="button">＋ 添加另一樣食物</button><p class="food-help add-more-hint">${count?`目前 ${count} 項；可以轉分類繼續加。`:'一餐可以加入多樣食物。'}</p>
    <div class="form-row"><label>補充／整餐說明（選填）</label><textarea class="control" data-batch-notes placeholder="例如：飯半碗，餸全食">${esc(m.notes||'')}</textarea></div>
    <div class="batch-result">${validResult(r)?resultHtml(r,m.mealType+'估算'):''}</div>
    ${validResult(r)?`<button class="secondary" data-reanalyze="${mi}">只重分析呢餐</button>`:''}
   </div></details>`
  }
- function renderBatch(){
+ function renderBatch(view=null){
+  const openMeals=new Set(view?.openMeals||[]);
   const active=activeMeals(),validCount=active.filter(m=>validResult(m.result)).length,total=active.reduce((a,m)=>{const t=totalsFor(m.result);NUTRIENTS.forEach(k=>a[k]+=t[k]);return a},{calories:0,protein:0,carbs:0,fat:0});
-  openSheet('補錄全日',`<p class="food-help batch-notice">唔使打食物名稱。每一餐都係：揀分類 → 撳食物 → 揀份量／煮法。全部揀好先一次過分析。</p>
+  openSheet('補錄全日',`<p class="food-help batch-notice">每餐可以加入多樣食物：揀分類 → 撳食物 → 揀份量／煮法 → 再按「＋ 添加另一樣食物」。全部揀好先一次過分析。</p>
    <div class="batch-day-head"><div class="form-row"><label for="batchDate">日期</label><input class="control" id="batchDate" type="date" value="${esc(batchDraft.date)}"></div><span class="food-help">${active.length?`${validCount}/${active.length} 餐已分析`:'未有食物'}</span></div>
-   <div id="batchMeals">${batchDraft.meals.map(batchMealHtml).join('')}</div>
+   <div id="batchMeals">${batchDraft.meals.map((m,mi)=>batchMealHtml(m,mi,openMeals)).join('')}</div>
    ${validCount?`<div class="summary batch-total"><span>已分析合計</span><strong>${Math.round(total.calories)} kcal</strong><small>P ${Math.round(total.protein)}g · C ${Math.round(total.carbs)}g · F ${Math.round(total.fat)}g</small></div>`:''}
    <button class="primary" id="analyzeBatch" ${active.length?'':'disabled'}>✨ 一次分析全部${active.length?` ${active.length} 餐`:''}</button><p id="batchStatus" class="food-help" role="status"></p>
    <button class="primary" id="saveBatch" ${active.length&&validCount===active.length?'':'hidden'}>確認並儲存全部</button><button class="danger-link" id="clearBatch">清除全日草稿</button>`);
   $('#batchDate').onchange=e=>{batchDraft.date=e.target.value;persistBatch()};
-  $$('[data-batch-category]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];m.category=b.dataset.batchCategory;persistBatch();renderBatch()});
-  $$('[data-batch-food]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];m.items.push(defaults(m.category,b.dataset.batchFood));invalidateMeal(m);renderBatch()});
+  $$('[data-batch-category]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];m.category=b.dataset.batchCategory;persistBatch();renderBatch(captureBatchView())});
+  $$('[data-batch-food]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];const view=captureBatchView();m.items.push(defaults(m.category,b.dataset.batchFood));invalidateMeal(m);renderBatch(view)});
   $$('[data-batch-custom-food]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),box=card.querySelector('.batch-custom-food-box');box.hidden=!box.hidden;if(!box.hidden)setTimeout(()=>box.querySelector('[data-batch-custom-name]')?.focus(),0)});
-  const addBatchCustom=(card)=>{const m=batchDraft.meals[+card.dataset.mealIndex],input=card.querySelector('[data-batch-custom-name]'),name=(input?.value||'').trim();if(!name)return toast('請輸入其他食物名稱');m.items.push(defaults(m.category,name));invalidateMeal(m);renderBatch()};
+  const addBatchCustom=(card)=>{const m=batchDraft.meals[+card.dataset.mealIndex],input=card.querySelector('[data-batch-custom-name]'),name=(input?.value||'').trim();if(!name)return toast('請輸入其他食物名稱');const view=captureBatchView();m.items.push(defaults(m.category,name));invalidateMeal(m);renderBatch(view)};
   $$('[data-batch-add-custom]').forEach(b=>b.onclick=e=>{e.preventDefault();addBatchCustom(b.closest('[data-meal-index]'))});
   $$('[data-batch-custom-name]').forEach(input=>input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();addBatchCustom(input.closest('[data-meal-index]'))}});
   $$('[data-batch-field]').forEach(el=>el.oninput=()=>{const card=el.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex],item=el.closest('[data-batch-item]');m.items[+item.dataset.batchItem][el.dataset.batchField]=el.value;invalidateMeal(m)});
-  $$('[data-batch-portion]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex],item=b.closest('[data-batch-item]');m.items[+item.dataset.batchItem].portion=b.dataset.batchPortion;invalidateMeal(m);renderBatch()});
-  $$('[data-batch-remove]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];m.items.splice(+b.dataset.batchRemove,1);invalidateMeal(m);renderBatch()});
+  $$('[data-batch-portion]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex],item=b.closest('[data-batch-item]');const view=captureBatchView();m.items[+item.dataset.batchItem].portion=b.dataset.batchPortion;invalidateMeal(m);renderBatch(view)});
+  $$('[data-batch-custom-portion]').forEach(inp=>inp.oninput=()=>{const card=inp.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex],item=inp.closest('[data-batch-item]'),v=inp.value.trim();if(!v)return;m.items[+item.dataset.batchItem].portion=v;item.querySelectorAll('[data-batch-portion]').forEach(x=>x.classList.remove('on'));inp.closest('.custom-portion-inline')?.classList.add('on');invalidateMeal(m)});
+  $$('[data-batch-remove]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];const view=captureBatchView();m.items.splice(+b.dataset.batchRemove,1);invalidateMeal(m);renderBatch(view)});
   $$('[data-batch-notes]').forEach(el=>el.oninput=()=>{const card=el.closest('[data-meal-index]'),m=batchDraft.meals[+card.dataset.mealIndex];m.notes=el.value;invalidateMeal(m);if($('#saveBatch'))$('#saveBatch').hidden=true});
+  $$('[data-batch-add-more]').forEach(b=>b.onclick=e=>{e.preventDefault();const card=b.closest('[data-meal-index]'),target=card?.querySelector('.batch-categories');if(target)target.scrollIntoView({behavior:'smooth',block:'center'});toast('揀分類再加下一樣食物')});
   $$('[data-reanalyze]').forEach(b=>b.onclick=e=>{e.preventDefault();reanalyzeMeal(+b.dataset.reanalyze)});
   $('#analyzeBatch').onclick=analyzeBatch;if($('#saveBatch'))$('#saveBatch').onclick=saveBatch;
   $('#clearBatch').onclick=()=>{if(!confirm('確定清除全日補錄草稿？'))return;batchDraft=blankBatch();localStorage.removeItem(BATCH_KEY);renderBatch()}
+  restoreView(view);
  }
  async function analyzeBatch(){
   if(batchBusy)return;const active=activeMeals();if(!active.length)return toast('請至少揀一餐食物');if(!batchDraft.date)return toast('請選擇日期');
