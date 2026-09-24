@@ -30,7 +30,28 @@ function cloudPayload(){const copy=JSON.parse(JSON.stringify(db));delete copy.se
 function saveLocal(){localStorage.setItem('fitlog-v1',JSON.stringify(db));renderAll()}
 function persist(){changeCounter++;saveLocal();clearTimeout(syncTimer);syncTimer=setTimeout(()=>syncCloud(false),350)}
 function markDeleted(type,key){db.syncMeta.deleted[type][key]=new Date().toISOString()}
-async function syncCloud(showMessage=false){if(!db.settings.apiUrl)return;if(syncing){syncAgain=true;return}syncing=true;const startedAt=changeCounter;try{const merged=await sync('sync',{db:cloudPayload()});if(merged&&startedAt===changeCounter){const settings=db.settings;db=normaliseDb(merge(DEFAULT,merged));db.settings=settings;saveLocal()}else if(merged)syncAgain=true;if(showMessage)toast('所有裝置已同步')}catch(e){if(showMessage)toast('暫時未能同步，資料已保存在此裝置')}finally{syncing=false;if(syncAgain){syncAgain=false;setTimeout(()=>syncCloud(false),100)}}}
+function mergeDbPreservingEntries(current,incoming){
+ current=normaliseDb(JSON.parse(JSON.stringify(current||{})));incoming=normaliseDb(JSON.parse(JSON.stringify(incoming||{})));
+ const result=normaliseDb(merge(DEFAULT,incoming));
+ result.syncMeta=result.syncMeta||{};result.syncMeta.deleted=result.syncMeta.deleted||{};
+ const cMeta=current.syncMeta||{},iMeta=incoming.syncMeta||{};
+ ['meals','workouts','body','steps'].forEach(type=>{
+  const deleted={...((iMeta.deleted&&iMeta.deleted[type])||{})};
+  Object.entries((cMeta.deleted&&cMeta.deleted[type])||{}).forEach(([k,v])=>{if(!deleted[k]||v>deleted[k])deleted[k]=v});
+  result.syncMeta.deleted[type]=deleted;
+  const items={};
+  [...(incoming[type]||[]),...(current[type]||[])].forEach(item=>{const key=String(item.id||item.time||item.date);if(!items[key]||(item.updatedAt||item.time||'')>(items[key].updatedAt||items[key].time||''))items[key]=item});
+  result[type]=Object.keys(items).filter(key=>!deleted[key]||deleted[key]<(items[key].updatedAt||items[key].time||'')).map(key=>items[key]).sort((a,b)=>String(a.time||a.date||'').localeCompare(String(b.time||b.date||'')));
+ });
+ const cProfileAt=cMeta.profileUpdatedAt||'',iProfileAt=iMeta.profileUpdatedAt||'';
+ if(cProfileAt>iProfileAt)result.profile=current.profile;
+ result.syncMeta.profileUpdatedAt=cProfileAt>iProfileAt?cProfileAt:iProfileAt;
+ const cLastAt=cMeta.lastWorkoutUpdatedAt||'',iLastAt=iMeta.lastWorkoutUpdatedAt||'';
+ if(cLastAt>iLastAt)result.lastWorkout=current.lastWorkout;
+ result.syncMeta.lastWorkoutUpdatedAt=cLastAt>iLastAt?cLastAt:iLastAt;
+ return normaliseDb(result)
+}
+async function syncCloud(showMessage=false){if(!db.settings.apiUrl)return;if(syncing){syncAgain=true;return}syncing=true;const startedAt=changeCounter;try{const merged=await sync('sync',{db:cloudPayload()});if(merged&&startedAt===changeCounter){const settings=db.settings;db=mergeDbPreservingEntries(db,merged);db.settings=settings;saveLocal()}else if(merged)syncAgain=true;if(showMessage)toast('所有裝置已同步')}catch(e){if(showMessage)toast('暫時未能同步，資料已保存在此裝置')}finally{syncing=false;if(syncAgain){syncAgain=false;setTimeout(()=>syncCloud(false),100)}}}
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1600)}
 let sheetEpoch=0;
